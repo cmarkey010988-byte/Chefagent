@@ -1,0 +1,6 @@
+{
+  "name": "ChefAgent - AdelicZeta Enterprise Hospitality Platform",
+  "description": "Enterprise Multi-Property Hospitality & Culinary Management Platform powered by the AdelicZeta Formal Verification Engine.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

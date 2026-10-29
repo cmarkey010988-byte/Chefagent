@@ -1,0 +1,6 @@
+{
+  "summary":  "Architecture and implementation plan for the Chronos Acoustic Orchestration Engine: Kotlin Room data layer expansion, reverse-calculated timeline scheduling, AmbientKitchenListenerService foreground audio buffer, and dual-mode Chronos Timeline BOH UI with real-time Burn Line.",
+  "updatedAt":  "2026-10-29T13:57:17.256316711Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

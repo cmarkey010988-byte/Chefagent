@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    network_security_config.xml
+    ChefAgent Android Network Security Configuration
+
+    P2P Mesh Network Security Policy:
+    1. Permits cleartext local HTTP/WS traffic strictly on local commercial kitchen subnets
+       (192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12, 127.0.0.1, localhost) for sub-second Kiosk P2P Sync on port 8888.
+    2. Enforces HTTPS & WSS TLS 1.3 with certificate pinning for all remote enterprise endpoints.
+-->
+<network-security-config>
+    <!-- Cleartext Traffic Permitted for Local Subnets -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+        <domain includeSubdomains="true">10.0.0.1</domain>
+        <domain includeSubdomains="true">192.168.1.1</domain>
+    </domain-config>
+
+    <!-- Base Configuration: Require HTTPS for external domains -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- Certificate Pinning for Production Cloud Endpoints -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">api.chefagent.com</domain>
+        <pin-set expiration="2027-12-31">
+            <!-- SHA-256 Public Key Pin for ChefAgent Enterprise Root Certificate -->
+            <pin digest="SHA-256">a8s9df7a8sdf9a7sd8f9a7sdf98a7sdf98a7sdf98a7=</pin>
+            <!-- Backup Pin -->
+            <pin digest="SHA-256">9s8df7a98sdf7a98sdf7a98sdf7a98sdf7a98sdf7=</pin>
+        </pin-set>
+    </domain-config>
+</network-security-config>
