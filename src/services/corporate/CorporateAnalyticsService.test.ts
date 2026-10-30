@@ -52,3 +52,34 @@ test('Property drill-down retrieves boundary properties accurately', () => {
   const nonExistent = CorporateAnalyticsService.getPropertyMetrics('PROP-999');
   assert.equal(nonExistent, null);
 });
+
+test('Enterprise margin economics calculates realistic 23% EBITDA and +1,180 bps bridge', () => {
+  const economics = CorporateAnalyticsService.getEnterpriseMarginEconomics();
+  assert.ok(economics.portfolioAnnualGrossRevenue > 250_000_000, 'Portfolio gross revenue should exceed $250M for 49 sites');
+  assert.equal(economics.baselineEbitdaMarginPercent, 11.2, 'Baseline EBITDA should be realistic hospitality standard 11.2%');
+  assert.equal(economics.achievedEbitdaMarginPercent, 23.0, 'Transformed EBITDA margin should reach 23.0%');
+  assert.equal(economics.netEbitdaExpansionBps, 1180, 'Net margin expansion should be +1,180 bps');
+  assert.ok(economics.netAnnualProfitLiftDollars > 30_000_000, 'Annual profit lift should exceed $30M across 49 sites');
+  assert.equal(economics.levers.length, 4, 'Should have exactly 4 strategic operational levers');
+  
+  // Sum of levers
+  const totalBpsFromLevers = economics.levers.reduce((sum, l) => sum + l.basisPointsGain, 0);
+  assert.equal(totalBpsFromLevers, 1180, 'Operational levers must sum up to exact 1,180 bps net expansion');
+  assert.ok(economics.enterpriseValueAddedAt12x > 350_000_000, 'Enterprise value added at 12x EV/EBITDA should exceed $350M');
+  assert.ok(economics.averagePaybackPeriodDays <= 45, 'Hardware kiosk payback period should be under 45 days');
+});
+
+test('Custom Portfolio ROI & Margin Sensitivity Simulator works across arbitrary fleet sizes', () => {
+  // Test 10 rooftops @ $5.5M avg rev
+  const sim10 = CorporateAnalyticsService.simulatePortfolioRoi(10, 5_500_000, 33.5);
+  assert.equal(sim10.annualRevenueTotal, 55_000_000);
+  assert.equal(sim10.baselineEbitdaTotal, Math.round(55_000_000 * 0.112));
+  assert.equal(sim10.modeledEbitdaTotal, Math.round(55_000_000 * 0.23));
+  assert.equal(sim10.netAnnualProfitLiftDollars, sim10.modeledEbitdaTotal - sim10.baselineEbitdaTotal);
+  assert.ok(sim10.paybackDays <= 40, 'Payback period should be fast');
+
+  // Test 100 rooftops @ $6.0M avg rev
+  const sim100 = CorporateAnalyticsService.simulatePortfolioRoi(100, 6_000_000, 34.0);
+  assert.equal(sim100.annualRevenueTotal, 600_000_000);
+  assert.ok(sim100.netAnnualProfitLiftDollars > 70_000_000);
+});

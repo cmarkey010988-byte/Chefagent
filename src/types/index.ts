@@ -44,6 +44,12 @@ export interface PrepItem {
   chronosStage?: 'FABRICATION' | 'SUB_RECIPE' | 'HOT_HOLD' | 'PLATING_FIRE';
   targetPlatingTimestamp?: number;
   banquetEventId?: string;
+  // Edge-AI Vision Telemetry Fields
+  visionStationId?: string;
+  detectedItemClass?: string;
+  fillLevelPercentage?: number; // 0 - 100%
+  anomalyFlag?: boolean;
+  lastVisualTimestamp?: number;
 }
 
 export type InventoryItemType =

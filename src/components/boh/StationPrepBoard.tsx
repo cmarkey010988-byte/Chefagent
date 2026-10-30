@@ -20,9 +20,11 @@ import {
   Radio,
   Layers,
   Sparkles,
+  Camera,
 } from 'lucide-react';
 import { ChronosGanttLane } from './ChronosGanttLane';
 import { ChronosCountdownFeed } from './ChronosCountdownFeed';
+import { StationVisionOverlay } from './StationVisionOverlay';
 import { reverseScheduleChronosTimeline } from '../../utils/ChronosScheduler';
 import { useAmbientKitchenListener } from '../../hooks/useAmbientKitchenListener';
 
@@ -50,8 +52,8 @@ export const StationPrepBoard: React.FC = () => {
     auditInventoryItem,
   } = useChef();
 
-  // Chronos Acoustic Orchestration Engine State
-  const [viewMode, setViewMode] = useState<'CHRONOS' | 'STANDARD'>('CHRONOS');
+  // Chronos Acoustic Orchestration & Multimodal Vision Engine State
+  const [viewMode, setViewMode] = useState<'CHRONOS' | 'STANDARD' | 'VISION'>('CHRONOS');
   const [chronosLayout, setChronosLayout] = useState<ChronosLayoutMode>('GANTT');
   const [targetPlatingTime, setTargetPlatingTime] = useState<number>(() => Date.now() + 2 * 60 * 60 * 1000);
   const [currentTime, setCurrentTime] = useState<number>(() => Date.now());
@@ -306,6 +308,18 @@ export const StationPrepBoard: React.FC = () => {
                 <Layers className="w-4 h-4" />
                 <span>Station Cards Grid</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('VISION')}
+                className={`min-h-[44px] px-3.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                  viewMode === 'VISION'
+                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-black'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Camera className="w-4 h-4" />
+                <span>Edge Vision Stream</span>
+              </button>
             </div>
 
             {/* Chronos Sub-layout Toggle (Gantt vs Countdown) */}
@@ -488,8 +502,19 @@ export const StationPrepBoard: React.FC = () => {
         })}
       </div>
 
-      {/* Main Viewport Content: Chronos Timeline vs Standard Prep Cards */}
-      {viewMode === 'CHRONOS' ? (
+      {/* Main Viewport Content: Chronos Timeline vs Edge Vision Stream vs Standard Prep Cards */}
+      {viewMode === 'VISION' ? (
+        <StationVisionOverlay
+          stationId={activeStation === 'ALL' ? 'Sauce/Sauté' : activeStation}
+          activePrepItems={filteredItems}
+          onConfirm86={(recipeName) => {
+            const matched = inventoryItems.find((i) => i.ingredientName.toLowerCase().includes(recipeName.toLowerCase()));
+            if (matched) {
+              auditInventoryItem(matched.id, 0);
+            }
+          }}
+        />
+      ) : viewMode === 'CHRONOS' ? (
         <div className="space-y-4">
           {chronosLayout === 'GANTT' ? (
             <ChronosGanttLane

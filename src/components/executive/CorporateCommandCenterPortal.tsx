@@ -39,15 +39,44 @@ import {
   MapPin,
   ExternalLink,
   DollarSign,
-  Clock,
+  Percent,
+  Zap,
+  Sparkles,
+  Calculator,
+  PieChart,
+  Scale,
+  Award,
+  ArrowRight,
+  Activity,
 } from 'lucide-react';
-import { CorporateAnalyticsService, PortfolioSummary, PropertyMetrics, PropertyHealthStatus } from '../../services/corporate/CorporateAnalyticsService';
+import {
+  CorporateAnalyticsService,
+  PortfolioSummary,
+  PropertyMetrics,
+  PropertyHealthStatus,
+  EnterpriseMarginEconomics,
+  MarginBridgeLever,
+  CustomRoiScenario,
+} from '../../services/corporate/CorporateAnalyticsService';
 import { ERPIntegrationService, ERPExportPayload } from '../../services/erp/ERPIntegrationService';
 import { AuthInterceptor, UserRole } from '../../services/security/AuthInterceptor';
 
 export const CorporateCommandCenterPortal: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'heatmap' | 'analytics' | 'erp' | 'sync' | 'rbac'>('heatmap');
+  const [activeTab, setActiveTab] = useState<'heatmap' | 'margins' | 'analytics' | 'erp' | 'sync' | 'rbac'>('heatmap');
   const [portfolio, setPortfolio] = useState<PortfolioSummary>(CorporateAnalyticsService.getPortfolioSummary());
+  const [marginEconomics, setMarginEconomics] = useState<EnterpriseMarginEconomics>(() =>
+    CorporateAnalyticsService.getEnterpriseMarginEconomics()
+  );
+
+  // ROI Simulator state
+  const [simRooftops, setSimRooftops] = useState<number>(49);
+  const [simRevenuePerRooftop, setSimRevenuePerRooftop] = useState<number>(5800000);
+  const [simBaselineFcp, setSimBaselineFcp] = useState<number>(33.5);
+
+  const simulatedRoi = useMemo(() => {
+    return CorporateAnalyticsService.simulatePortfolioRoi(simRooftops, simRevenuePerRooftop, simBaselineFcp);
+  }, [simRooftops, simRevenuePerRooftop, simBaselineFcp]);
+
   const [selectedProperty, setSelectedProperty] = useState<PropertyMetrics | null>(null);
   const [selectedErpPropertyId, setSelectedErpPropertyId] = useState<string>('PROP-01');
   const [erpExports, setErpExports] = useState<ERPExportPayload[]>(ERPIntegrationService.getExportHistory());
@@ -67,10 +96,13 @@ export const CorporateCommandCenterPortal: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(12);
   const [showAllRooftopsLeaderboard, setShowAllRooftopsLeaderboard] = useState(false);
+  const [marginLeaderboardSearch, setMarginLeaderboardSearch] = useState('');
+  const [marginLeaderboardSort, setMarginLeaderboardSort] = useState<'margin-desc' | 'lift-desc' | 'fcp-asc' | 'revenue-desc'>('margin-desc');
 
   useEffect(() => {
-    // Refresh analytics
+    // Refresh analytics & margin economics
     setPortfolio(CorporateAnalyticsService.getPortfolioSummary());
+    setMarginEconomics(CorporateAnalyticsService.getEnterpriseMarginEconomics());
   }, []);
 
   // Distinct regions extracted from portfolio
@@ -166,6 +198,39 @@ export const CorporateCommandCenterPortal: React.FC = () => {
       red: data.red,
     })).sort((a, b) => b.ebitda - a.ebitda);
   }, [portfolio.properties]);
+
+  // Filtered and sorted properties for the Margin Expansion Leaderboard
+  const sortedMarginProperties = useMemo(() => {
+    let list = [...portfolio.properties];
+    if (marginLeaderboardSearch.trim()) {
+      const q = marginLeaderboardSearch.toLowerCase().trim();
+      list = list.filter(
+        (p) =>
+          p.propertyName.toLowerCase().includes(q) ||
+          p.propertyId.toLowerCase().includes(q) ||
+          p.region.toLowerCase().includes(q)
+      );
+    }
+
+    list.sort((a, b) => {
+      if (marginLeaderboardSort === 'margin-desc') {
+        return (b.ebitdaMarginPercent || 0) - (a.ebitdaMarginPercent || 0);
+      }
+      if (marginLeaderboardSort === 'lift-desc') {
+        const liftA = (a.ebitdaMarginPercent || 0) - (a.baselineEbitdaMarginPercent || 0);
+        const liftB = (b.ebitdaMarginPercent || 0) - (b.baselineEbitdaMarginPercent || 0);
+        return liftB - liftA;
+      }
+      if (marginLeaderboardSort === 'fcp-asc') {
+        return a.currentFCP - b.currentFCP;
+      }
+      if (marginLeaderboardSort === 'revenue-desc') {
+        return (b.monthlyGrossRevenue || 0) - (a.monthlyGrossRevenue || 0);
+      }
+      return 0;
+    });
+    return list;
+  }, [portfolio.properties, marginLeaderboardSearch, marginLeaderboardSort]);
 
   const handleRunERPExport = async (connectorType: 'QUICKBOOKS_ONLINE' | 'RESTAURANT_365' | 'GENERIC_REST_ERP') => {
     setExportLoading(true);
@@ -349,6 +414,20 @@ export const CorporateCommandCenterPortal: React.FC = () => {
               Portfolio Heatmap ({portfolio.totalProperties})
             </button>
             <button
+              onClick={() => setActiveTab('margins')}
+              className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 whitespace-nowrap ${
+                activeTab === 'margins'
+                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shadow-sm'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+              }`}
+            >
+              <TrendingUp className="w-4 h-4 text-emerald-400" />
+              Profit Margins &amp; EBITDA Bridge
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
+                +1,180 bps
+              </span>
+            </button>
+            <button
               onClick={() => setActiveTab('analytics')}
               className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 whitespace-nowrap ${
                 activeTab === 'analytics'
@@ -356,7 +435,7 @@ export const CorporateCommandCenterPortal: React.FC = () => {
                   : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
               }`}
             >
-              <TrendingUp className="w-4 h-4" />
+              <Activity className="w-4 h-4" />
               Macro Analytics HUD
             </button>
             <button
@@ -402,56 +481,78 @@ export const CorporateCommandCenterPortal: React.FC = () => {
           {/* Main Content Body */}
           <main className="flex-1 p-6 overflow-y-auto max-w-7xl mx-auto w-full space-y-6">
             {/* Macro Header KPIs */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Card 1: Profit Margin & EBITDA Lift */}
+              <div
+                onClick={() => setActiveTab('margins')}
+                className="bg-slate-900 border border-emerald-500/30 hover:border-emerald-500/60 transition-all rounded-2xl p-5 relative overflow-hidden cursor-pointer group"
+              >
+                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity text-emerald-400">
+                  <TrendingUp className="w-16 h-16" />
+                </div>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-slate-400 font-medium">Enterprise EBITDA Margin</p>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
+                    +1,180 bps Lift
+                  </span>
+                </div>
+                <h3 className="text-2xl font-bold text-white mt-1 font-mono flex items-baseline gap-2">
+                  <span className="text-slate-400 text-base line-through">11.2%</span>
+                  <span className="text-emerald-400 font-extrabold">23.0%</span>
+                </h3>
+                <div className="flex items-center gap-1.5 text-xs text-emerald-300 mt-2 font-mono">
+                  <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>+${(marginEconomics.netAnnualProfitLiftDollars / 1_000_000).toFixed(2)}M/yr Net Profit Lift</span>
+                </div>
+              </div>
+
+              {/* Card 2: Annual Portfolio Gross Run-rate */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-4 opacity-10 text-amber-400">
                   <Building2 className="w-16 h-16" />
                 </div>
-                <p className="text-xs text-slate-400 font-medium">Regional Monthly EBITDA</p>
+                <p className="text-xs text-slate-400 font-medium">Annual Gross Run-rate (49 Sites)</p>
                 <h3 className="text-2xl font-bold text-white mt-1 font-mono">
-                  ${portfolio.regionalEbitdaTotal.toLocaleString()}
+                  ${(marginEconomics.portfolioAnnualGrossRevenue / 1_000_000).toFixed(1)}M
                 </h3>
-                <div className="flex items-center gap-1.5 text-xs text-emerald-400 mt-2">
-                  <ArrowUpRight className="w-3.5 h-3.5" />
-                  <span>Portfolio aggregate across 49 sites</span>
+                <div className="flex items-center gap-1.5 text-xs text-amber-400 mt-2 font-mono">
+                  <span>${portfolio.regionalEbitdaTotal.toLocaleString()}/mo EBITDA run-rate</span>
                 </div>
               </div>
 
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-4 opacity-10 text-emerald-400">
-                  <TrendingUp className="w-16 h-16" />
-                </div>
-                <p className="text-xs text-slate-400 font-medium">Portfolio Avg Food Cost %</p>
-                <h3 className="text-2xl font-bold text-white mt-1 font-mono">
-                  {portfolio.averageFCP}%
-                </h3>
-                <p className="text-xs text-slate-400 mt-2">Target Benchmark: ≤ 28.0%</p>
-              </div>
-
+              {/* Card 3: Food Cost % & Waste Compression */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-4 opacity-10 text-cyan-400">
                   <ShieldCheck className="w-16 h-16" />
                 </div>
-                <p className="text-xs text-slate-400 font-medium">Total Waste Recovered</p>
-                <h3 className="text-2xl font-bold text-white mt-1 font-mono">
-                  ${portfolio.totalWasteRecovered.toLocaleString()}
+                <p className="text-xs text-slate-400 font-medium">Portfolio Avg Food Cost (FCP)</p>
+                <h3 className="text-2xl font-bold text-white mt-1 font-mono flex items-baseline gap-2">
+                  <span className="text-slate-400 text-sm line-through">33.4%</span>
+                  <span className="text-cyan-400">{portfolio.averageFCP}%</span>
                 </h3>
-                <p className="text-xs text-emerald-400 mt-2">Surplus sales gains: ${portfolio.totalSurplusSalesGains.toLocaleString()}</p>
+                <p className="text-xs text-emerald-400 mt-2 font-mono">
+                  -${portfolio.totalWasteRecovered.toLocaleString()}/mo shrink recovered
+                </p>
               </div>
 
+              {/* Card 4: Fleet Rooftops & Valuation Created */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-4 opacity-10 text-purple-400">
                   <Server className="w-16 h-16" />
                 </div>
-                <p className="text-xs text-slate-400 font-medium">Active Rooftops</p>
-                <h3 className="text-2xl font-bold text-white mt-1 font-mono flex items-center gap-2">
-                  {portfolio.totalProperties}
-                  <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-sans font-semibold">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    Fleet Synced
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-slate-400 font-medium">Fleet EV Added @ 12x</p>
+                  <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-sans font-semibold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    49 Synced
                   </span>
+                </div>
+                <h3 className="text-2xl font-bold text-purple-300 mt-1 font-mono">
+                  +${(marginEconomics.enterpriseValueAddedAt12x / 1_000_000).toFixed(1)}M
                 </h3>
-                <p className="text-xs text-slate-400 mt-2">{portfolio.greenCount} Optimal · {portfolio.yellowCount} Warning · {portfolio.redCount} Critical</p>
+                <p className="text-xs text-slate-400 mt-2">
+                  Hardware Capex Payback: <strong className="text-white font-mono">{marginEconomics.averagePaybackPeriodDays} Days</strong>
+                </p>
               </div>
             </div>
 
@@ -796,6 +897,585 @@ export const CorporateCommandCenterPortal: React.FC = () => {
                       </button>
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB: PROFIT MARGINS & EBITDA BRIDGE */}
+            {activeTab === 'margins' && (
+              <div className="space-y-8">
+                {/* Hero Header & Value Creation Banner */}
+                <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/40 border border-emerald-500/30 rounded-2xl p-6 sm:p-8 relative overflow-hidden shadow-2xl">
+                  <div className="absolute top-0 right-0 p-8 opacity-10 text-emerald-400 pointer-events-none">
+                    <TrendingUp className="w-48 h-48" />
+                  </div>
+                  <div className="max-w-3xl space-y-3 relative z-10">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono font-semibold">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                      49-ROOFTOP ENTERPRISE TRANSFORMATION · $284.6M ANNUAL RUN-RATE
+                    </div>
+                    <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                      Enterprise Profit Margins &amp; EBITDA Bridge
+                    </h2>
+                    <p className="text-sm text-slate-300 leading-relaxed">
+                      Commercial F&amp;B and country club operators typically endure razor-thin 10–12% EBITDA margins due to unmonitored portion drift, prep spoilage, 86 communication lag, and labor bottlenecks.
+                      By fusing <strong className="text-white">Multimodal Edge Vision</strong> (Gastronorm fill telemetry), <strong className="text-white">Zero-Loss HACCP 86 Sync</strong>, <strong className="text-white">Par-to-Plate AI Surplus Monetization</strong>, and <strong className="text-white">Chronos JIT Acoustic Scheduling</strong>, ChefAgent pushes fleet EBITDA margins to <strong className="text-emerald-400 font-mono text-base font-bold">23.0%</strong> (+1,180 bps net expansion), generating <strong className="text-white font-mono">+$33.58M in annual recurring profit</strong> across 49 sites.
+                    </p>
+                  </div>
+
+                  {/* 4 Primary Margin Transformation Metric Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8 relative z-10">
+                    <div className="bg-slate-800/80 border border-emerald-500/40 rounded-xl p-5 shadow-lg">
+                      <div className="flex items-center justify-between text-xs text-slate-400">
+                        <span>Fleet EBITDA Margin</span>
+                        <span className="px-2 py-0.5 rounded font-mono font-bold text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                          +1,180 bps
+                        </span>
+                      </div>
+                      <div className="text-2xl sm:text-3xl font-extrabold font-mono text-white mt-2 flex items-baseline gap-2">
+                        <span className="text-slate-500 text-lg line-through">11.2%</span>
+                        <span className="text-emerald-400">23.0%</span>
+                      </div>
+                      <p className="text-xs text-slate-300 mt-2 font-mono">
+                        $31.87M ➔ $65.46M EBITDA (+105.4% expansion)
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-800/80 border border-slate-700 rounded-xl p-5 shadow-lg">
+                      <div className="flex items-center justify-between text-xs text-slate-400">
+                        <span>Net Annual Profit Lift</span>
+                        <span className="text-emerald-400 font-mono font-bold text-xs">+$2.80M / mo</span>
+                      </div>
+                      <div className="text-2xl sm:text-3xl font-extrabold font-mono text-white mt-2">
+                        +${(marginEconomics.netAnnualProfitLiftDollars / 1_000_000).toFixed(2)}M
+                      </div>
+                      <p className="text-xs text-slate-400 mt-2">
+                        Pure bottom-line cash flow added annually
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-800/80 border border-slate-700 rounded-xl p-5 shadow-lg">
+                      <div className="flex items-center justify-between text-xs text-slate-400">
+                        <span>Market Capitalization (12x)</span>
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                          12.0x Multiple
+                        </span>
+                      </div>
+                      <div className="text-2xl sm:text-3xl font-extrabold font-mono text-purple-300 mt-2">
+                        +${(marginEconomics.enterpriseValueAddedAt12x / 1_000_000).toFixed(1)}M
+                      </div>
+                      <p className="text-xs text-slate-400 mt-2">
+                        Net enterprise equity value created
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-800/80 border border-slate-700 rounded-xl p-5 shadow-lg">
+                      <div className="flex items-center justify-between text-xs text-slate-400">
+                        <span>Fleet Capex Amortization</span>
+                        <span className="text-amber-400 font-mono text-xs">$6.5K / Site</span>
+                      </div>
+                      <div className="text-2xl sm:text-3xl font-extrabold font-mono text-amber-400 mt-2">
+                        {marginEconomics.averagePaybackPeriodDays} Days
+                      </div>
+                      <p className="text-xs text-slate-400 mt-2">
+                        Full payback of NPU touchscreens &amp; sensors
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* THE 4 STRATEGIC OPERATIONAL LEVERS (THE MARGIN BRIDGE WATERFALL) */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                      <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                        <Scale className="w-5 h-5 text-amber-400" />
+                        The 4 Strategic Operational Levers: 11.2% to 23.0% EBITDA Bridge
+                      </h3>
+                      <p className="text-xs text-slate-400">
+                        Mathematical decomposition of how four synchronized edge algorithms expand EBITDA by +1,180 basis points
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 bg-slate-800/80 border border-slate-700 px-3 py-1.5 rounded-xl text-xs font-mono">
+                      <span className="text-slate-400">Total Bridge Sum:</span>
+                      <span className="text-emerald-400 font-bold">+1,180 bps (+11.8%)</span>
+                    </div>
+                  </div>
+
+                  {/* Visual Waterfall Progression Bar */}
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-3">
+                    <div className="flex justify-between items-center text-xs font-mono text-slate-400">
+                      <span>Baseline Hospitality (11.2%)</span>
+                      <span className="text-emerald-400 font-bold">Transformed Enterprise (23.0%)</span>
+                    </div>
+
+                    {/* Stacked Cumulative Bar */}
+                    <div className="w-full h-7 bg-slate-900 rounded-lg overflow-hidden flex border border-slate-800">
+                      <div
+                        style={{ width: `${(11.2 / 23.0) * 100}%` }}
+                        className="bg-slate-700 flex items-center justify-center text-[11px] font-mono text-slate-300 font-semibold border-r border-slate-900"
+                        title="Baseline EBITDA: 11.2%"
+                      >
+                        11.2% Base
+                      </div>
+                      <div
+                        style={{ width: `${(5.1 / 23.0) * 100}%` }}
+                        className="bg-amber-600 flex items-center justify-center text-[11px] font-mono text-slate-950 font-bold border-r border-slate-900"
+                        title="Lever 1: Multimodal Vision Portioning (+5.1%)"
+                      >
+                        +5.1%
+                      </div>
+                      <div
+                        style={{ width: `${(2.4 / 23.0) * 100}%` }}
+                        className="bg-emerald-600 flex items-center justify-center text-[11px] font-mono text-slate-950 font-bold border-r border-slate-900"
+                        title="Lever 2: Automated HACCP & 86 Par Sync (+2.4%)"
+                      >
+                        +2.4%
+                      </div>
+                      <div
+                        style={{ width: `${(2.1 / 23.0) * 100}%` }}
+                        className="bg-cyan-600 flex items-center justify-center text-[11px] font-mono text-slate-950 font-bold border-r border-slate-900"
+                        title="Lever 3: Par-to-Plate AI Surplus Monetization (+2.1%)"
+                      >
+                        +2.1%
+                      </div>
+                      <div
+                        style={{ width: `${(2.2 / 23.0) * 100}%` }}
+                        className="bg-purple-600 flex items-center justify-center text-[11px] font-mono text-slate-100 font-bold"
+                        title="Lever 4: Chronos JIT Prep Orchestration (+2.2%)"
+                      >
+                        +2.2%
+                      </div>
+                    </div>
+
+                    {/* Legend */}
+                    <div className="flex flex-wrap items-center gap-4 pt-2 text-[11px] text-slate-400">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded bg-slate-700"></span>
+                        <span>Baseline (11.2%)</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded bg-amber-600"></span>
+                        <span>COGS Compression (+5.1% / +510 bps)</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded bg-emerald-600"></span>
+                        <span>Waste Elimination (+2.4% / +240 bps)</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded bg-cyan-600"></span>
+                        <span>Surplus Monetization (+2.1% / +210 bps)</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded bg-purple-600"></span>
+                        <span>Labor Optimization (+2.2% / +220 bps)</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4 Lever In-Depth Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {marginEconomics.levers.map((lever, idx) => {
+                      const colors = [
+                        { border: 'border-amber-500/30', bg: 'bg-amber-500/10', text: 'text-amber-400', badge: 'bg-amber-500/20 text-amber-300' },
+                        { border: 'border-emerald-500/30', bg: 'bg-emerald-500/10', text: 'text-emerald-400', badge: 'bg-emerald-500/20 text-emerald-300' },
+                        { border: 'border-cyan-500/30', bg: 'bg-cyan-500/10', text: 'text-cyan-400', badge: 'bg-cyan-500/20 text-cyan-300' },
+                        { border: 'border-purple-500/30', bg: 'bg-purple-500/10', text: 'text-purple-400', badge: 'bg-purple-500/20 text-purple-300' },
+                      ][idx % 4];
+
+                      return (
+                        <div
+                          key={lever.id}
+                          className={`bg-slate-800/60 border ${colors.border} rounded-xl p-5 space-y-3 relative overflow-hidden`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${colors.badge}`}>
+                                  LEVER #{idx + 1} · {lever.category.replace('_', ' ')}
+                                </span>
+                              </div>
+                              <h4 className="text-base font-bold text-white mt-1.5">{lever.name}</h4>
+                            </div>
+                            <div className="text-right">
+                              <span className={`text-lg font-bold font-mono ${colors.text} block`}>
+                                +{lever.basisPointsGain} bps
+                              </span>
+                              <span className="text-[11px] font-mono text-slate-400 block">
+                                (+{lever.marginPercentGain}%)
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 bg-slate-900/80 rounded-lg p-2.5 font-mono text-xs">
+                            <div>
+                              <span className="text-slate-400 block text-[10px]">Annual Impact</span>
+                              <span className="text-white font-bold">+${(lever.annualDollarImpact / 1_000_000).toFixed(2)}M / yr</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block text-[10px]">Monthly Impact</span>
+                              <span className="text-emerald-400 font-bold">+${lever.monthlyDollarImpact.toLocaleString()} / mo</span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5 text-xs">
+                            <p className="text-slate-300">
+                              <strong className="text-white">Edge Architecture:</strong> {lever.description}
+                            </p>
+                            <p className="text-slate-400">
+                              <strong className="text-slate-300">Operational Physics:</strong> {lever.operationalDriver}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* INTERACTIVE ENTERPRISE ROI & MARGIN SENSITIVITY SIMULATOR */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                      <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                        <Calculator className="w-5 h-5 text-emerald-400" />
+                        Executive ROI &amp; Margin Sensitivity Simulator
+                      </h3>
+                      <p className="text-xs text-slate-400">
+                        Model financial outcomes across arbitrary fleet sizes, custom revenue targets, and baseline food cost benchmarks
+                      </p>
+                    </div>
+
+                    {/* Fleet Size Presets */}
+                    <div className="flex items-center gap-1.5 bg-slate-800/80 border border-slate-700 p-1 rounded-xl">
+                      {[
+                        { label: '5 Sites', count: 5 },
+                        { label: '15 Sites', count: 15 },
+                        { label: '25 Sites', count: 25 },
+                        { label: '49 Sites (Full)', count: 49 },
+                        { label: '100 Sites', count: 100 },
+                      ].map((preset) => (
+                        <button
+                          key={preset.count}
+                          onClick={() => setSimRooftops(preset.count)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-mono font-semibold transition-all ${
+                            simRooftops === preset.count
+                              ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                              : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Controls Column */}
+                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-5">
+                      <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                        <SlidersHorizontal className="w-4 h-4 text-emerald-400" />
+                        Operating Assumptions
+                      </h4>
+
+                      {/* Slider 1: Rooftops */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-400">Rooftops / Kitchens:</span>
+                          <span className="font-mono font-bold text-white">{simRooftops} Rooftops</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={1}
+                          max={150}
+                          step={1}
+                          value={simRooftops}
+                          onChange={(e) => setSimRooftops(parseInt(e.target.value, 10))}
+                          className="w-full accent-emerald-500 cursor-pointer"
+                        />
+                        <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                          <span>1 Site</span>
+                          <span>75 Sites</span>
+                          <span>150 Sites</span>
+                        </div>
+                      </div>
+
+                      {/* Slider 2: Average Revenue */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-400">Avg Revenue / Rooftop:</span>
+                          <span className="font-mono font-bold text-amber-400">
+                            ${(simRevenuePerRooftop / 1_000_000).toFixed(2)}M / yr
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={2000000}
+                          max={10000000}
+                          step={250000}
+                          value={simRevenuePerRooftop}
+                          onChange={(e) => setSimRevenuePerRooftop(parseInt(e.target.value, 10))}
+                          className="w-full accent-amber-500 cursor-pointer"
+                        />
+                        <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                          <span>$2.0M</span>
+                          <span>$6.0M</span>
+                          <span>$10.0M</span>
+                        </div>
+                      </div>
+
+                      {/* Slider 3: Baseline FCP */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-400">Baseline Food Cost %:</span>
+                          <span className="font-mono font-bold text-red-400">{simBaselineFcp}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={28.0}
+                          max={38.0}
+                          step={0.5}
+                          value={simBaselineFcp}
+                          onChange={(e) => setSimBaselineFcp(parseFloat(e.target.value))}
+                          className="w-full accent-red-500 cursor-pointer"
+                        />
+                        <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                          <span>28.0%</span>
+                          <span>33.0%</span>
+                          <span>38.0%</span>
+                        </div>
+                      </div>
+
+                      <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 text-[11px] text-slate-400 space-y-1">
+                        <span className="text-slate-300 font-semibold block">Modeled Physics:</span>
+                        <p>
+                          Edge vision portioning tares 720p Gastronorm pans to compress food cost to{' '}
+                          <strong className="text-cyan-400 font-mono">{simulatedRoi.modeledFcpPercent}%</strong> and elevates EBITDA to{' '}
+                          <strong className="text-emerald-400 font-mono">{simulatedRoi.modeledEbitdaMarginPercent}%</strong>.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Live Results Column (2 Cols) */}
+                    <div className="lg:col-span-2 space-y-4">
+                      {/* Top Metric Cards */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="bg-slate-950 border border-slate-800 rounded-xl p-4">
+                          <span className="text-xs text-slate-400 block">Total Portfolio Revenue</span>
+                          <span className="text-xl font-bold font-mono text-white mt-1 block">
+                            ${(simulatedRoi.annualRevenueTotal / 1_000_000).toFixed(2)}M
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-mono mt-1 block">
+                            {simulatedRoi.rooftopCount} locations aggregated
+                          </span>
+                        </div>
+
+                        <div className="bg-slate-950 border border-emerald-500/40 rounded-xl p-4">
+                          <span className="text-xs text-slate-400 block">Transformed EBITDA (23.0%)</span>
+                          <span className="text-xl font-bold font-mono text-emerald-400 mt-1 block">
+                            ${(simulatedRoi.modeledEbitdaTotal / 1_000_000).toFixed(2)}M
+                          </span>
+                          <span className="text-[10px] text-emerald-300 font-mono mt-1 block">
+                            Baseline: ${(simulatedRoi.baselineEbitdaTotal / 1_000_000).toFixed(2)}M (11.2%)
+                          </span>
+                        </div>
+
+                        <div className="bg-slate-950 border border-amber-500/40 rounded-xl p-4">
+                          <span className="text-xs text-slate-400 block">Net Annual Profit Lift</span>
+                          <span className="text-xl font-bold font-mono text-amber-400 mt-1 block">
+                            +${(simulatedRoi.netAnnualProfitLiftDollars / 1_000_000).toFixed(2)}M
+                          </span>
+                          <span className="text-[10px] text-amber-300 font-mono mt-1 block">
+                            +${Math.round(simulatedRoi.netAnnualProfitLiftDollars / 12).toLocaleString()} / month
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Payback & Valuation Scenarios */}
+                      <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                            <Zap className="w-4 h-4 text-amber-400" />
+                            Capex Amortization &amp; Enterprise Value Scenarios
+                          </h4>
+                          <span className="text-xs font-mono text-emerald-400 font-semibold">
+                            Payback in {simulatedRoi.paybackDays} Days
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-center">
+                          <div className="bg-slate-900/80 rounded-lg p-3 border border-slate-800">
+                            <span className="text-[11px] text-slate-400 block">Fleet Capex ($6.5k/site)</span>
+                            <span className="text-sm font-bold font-mono text-white mt-1 block">
+                              ${(simulatedRoi.rooftopCount * 6500).toLocaleString()}
+                            </span>
+                          </div>
+
+                          <div className="bg-slate-900/80 rounded-lg p-3 border border-slate-800">
+                            <span className="text-[11px] text-slate-400 block">10.0x EV / EBITDA</span>
+                            <span className="text-sm font-bold font-mono text-purple-400 mt-1 block">
+                              +${((simulatedRoi.netAnnualProfitLiftDollars * 10) / 1_000_000).toFixed(1)}M
+                            </span>
+                          </div>
+
+                          <div className="bg-slate-900/80 rounded-lg p-3 border border-purple-500/40 bg-purple-950/20">
+                            <span className="text-[11px] text-purple-300 font-semibold block">12.0x EV / EBITDA (Base)</span>
+                            <span className="text-sm font-extrabold font-mono text-purple-300 mt-1 block">
+                              +${((simulatedRoi.enterpriseValueAddedAt12x) / 1_000_000).toFixed(1)}M
+                            </span>
+                          </div>
+
+                          <div className="bg-slate-900/80 rounded-lg p-3 border border-slate-800">
+                            <span className="text-[11px] text-slate-400 block">15.0x EV / EBITDA</span>
+                            <span className="text-sm font-bold font-mono text-purple-400 mt-1 block">
+                              +${((simulatedRoi.netAnnualProfitLiftDollars * 15) / 1_000_000).toFixed(1)}M
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-[11px] text-slate-400 border-t border-slate-800/80 pt-3 flex items-center justify-between">
+                          <span>
+                            Hardware Capex covers NVIDIA Jetson Orin Nano / RK3588 NPU industrial touchscreens and wide-angle MIPI optical sensors.
+                          </span>
+                          <span className="text-emerald-400 font-mono font-semibold">
+                            {(365 / simulatedRoi.paybackDays).toFixed(1)}x Annual ROI
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* FLEET ROOFTOP MARGIN LEADERBOARD (ALL 49 SITES) */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 space-y-5">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                      <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                        <Award className="w-5 h-5 text-amber-400" />
+                        49-Rooftop Profit Margin Leaderboard &amp; Benchmark Ranking
+                      </h3>
+                      <p className="text-xs text-slate-400">
+                        Individual property profit margin expansion, FCP compression, and monthly EBITDA generation across all 8 regions
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                      {/* Search */}
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Search rooftop, region, ID..."
+                          value={marginLeaderboardSearch}
+                          onChange={(e) => setMarginLeaderboardSearch(e.target.value)}
+                          className="bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 w-52"
+                        />
+                      </div>
+
+                      {/* Sort */}
+                      <select
+                        value={marginLeaderboardSort}
+                        onChange={(e) => setMarginLeaderboardSort(e.target.value as any)}
+                        className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300 font-mono focus:outline-none focus:border-emerald-500/50"
+                      >
+                        <option value="margin-desc">Sort: Highest EBITDA Margin %</option>
+                        <option value="lift-desc">Sort: Highest Margin Expansion (bps)</option>
+                        <option value="fcp-asc">Sort: Lowest Food Cost % (FCP)</option>
+                        <option value="revenue-desc">Sort: Highest Monthly Revenue</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Leaderboard Table */}
+                  <div className="overflow-x-auto border border-slate-800 rounded-xl">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-950/80 border-b border-slate-800 text-slate-400 font-mono">
+                          <th className="py-3 px-4"># Rank</th>
+                          <th className="py-3 px-4">Property &amp; ID</th>
+                          <th className="py-3 px-4">Region</th>
+                          <th className="py-3 px-4 text-right">Monthly Gross</th>
+                          <th className="py-3 px-4 text-right">Baseline Margin</th>
+                          <th className="py-3 px-4 text-right">Achieved Margin</th>
+                          <th className="py-3 px-4 text-right">Expansion</th>
+                          <th className="py-3 px-4 text-right">FCP</th>
+                          <th className="py-3 px-4 text-right">Monthly EBITDA</th>
+                          <th className="py-3 px-4 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 font-mono">
+                        {sortedMarginProperties.map((p, idx) => {
+                          const achievedMargin = p.ebitdaMarginPercent || 23.0;
+                          const baselineMargin = p.baselineEbitdaMarginPercent || 11.2;
+                          const expansionBps = Math.round((achievedMargin - baselineMargin) * 100);
+
+                          return (
+                            <tr
+                              key={p.propertyId}
+                              onClick={() => setSelectedProperty(p)}
+                              className="hover:bg-slate-800/50 cursor-pointer transition-colors group"
+                            >
+                              <td className="py-3 px-4 text-slate-500 font-bold">
+                                #{idx + 1}
+                              </td>
+                              <td className="py-3 px-4 font-sans font-semibold text-white group-hover:text-amber-400 transition-colors">
+                                <div className="flex items-center gap-1.5">
+                                  <span>{p.propertyName}</span>
+                                  <span className="text-[10px] font-mono text-slate-500 font-normal">({p.propertyId})</span>
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 font-sans text-slate-400">
+                                {p.region}
+                              </td>
+                              <td className="py-3 px-4 text-right text-slate-300">
+                                ${(p.monthlyGrossRevenue || 580000).toLocaleString()}
+                              </td>
+                              <td className="py-3 px-4 text-right text-slate-500">
+                                {baselineMargin}%
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <span className={`font-bold ${
+                                  achievedMargin >= 23.0 ? 'text-emerald-400' : achievedMargin >= 18.0 ? 'text-amber-400' : 'text-red-400'
+                                }`}>
+                                  {achievedMargin}%
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">
+                                  +{expansionBps} bps
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-right text-cyan-400">
+                                {p.currentFCP}%
+                              </td>
+                              <td className="py-3 px-4 text-right font-bold text-white">
+                                ${p.monthlyEbitda.toLocaleString()}
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-sans font-semibold border ${
+                                  p.status === 'GREEN'
+                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                    : p.status === 'YELLOW'
+                                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                                    : 'bg-red-500/10 text-red-400 border-red-500/30'
+                                }`}>
+                                  {p.status}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-slate-400 pt-2">
+                    <span>
+                      Showing {sortedMarginProperties.length} of {portfolio.totalProperties} properties · Click any row to inspect AdelicZeta verification proof
+                    </span>
+                    <span className="font-mono text-emerald-400 font-semibold">
+                      Fleet Average Transformed EBITDA: {portfolio.portfolioEbitdaMarginPercent || 23.0}%
+                    </span>
+                  </div>
                 </div>
               </div>
             )}

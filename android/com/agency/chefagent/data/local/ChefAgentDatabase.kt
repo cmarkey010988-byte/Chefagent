@@ -30,9 +30,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PurchaseOrderEntity::class,
         SyncOutboxEntity::class,
         EventEntity::class,
-        EstablishmentProfileEntity::class
+        EstablishmentProfileEntity::class,
+        HaccpLogEntity::class
     ],
-    version = 3,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(DependenciesTypeConverter::class)
@@ -44,6 +45,7 @@ abstract class ChefAgentDatabase : RoomDatabase() {
     abstract fun syncOutboxDao(): SyncOutboxDao
     abstract fun eventDao(): EventDao
     abstract fun establishmentDao(): EstablishmentDao
+    abstract fun haccpDao(): HaccpDao
 
     companion object {
         private const val DATABASE_NAME = "chef_agent_master.db"
@@ -218,6 +220,70 @@ abstract class ChefAgentDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Migration from Version 3 to 4:
+         * - Extends prep_items with BOH Edge-AI Vision Telemetry (visionStationId, fillLevelPercentage, anomalyFlag, etc.).
+         * - Provisions high-performance WAL indices for real-time station pan monitoring.
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE prep_items ADD COLUMN visionStationId TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE prep_items ADD COLUMN detectedItemClass TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE prep_items ADD COLUMN fillLevelPercentage REAL NOT NULL DEFAULT 100.0")
+                db.execSQL("ALTER TABLE prep_items ADD COLUMN anomalyFlag INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE prep_items ADD COLUMN lastVisualTimestamp INTEGER DEFAULT NULL")
+                db.execSQL("CREATE INDEX IF NOT EXISTS idx_prep_items_vision_station ON prep_items (visionStationId, fillLevelPercentage)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS idx_prep_items_anomaly ON prep_items (anomalyFlag, lastVisualTimestamp)")
+            }
+        }
+
+        val MIGRATION_1_4 = object : Migration(1, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_1_2.migrate(db)
+                MIGRATION_2_3.migrate(db)
+                MIGRATION_3_4.migrate(db)
+            }
+        }
+
+        val MIGRATION_2_4 = object : Migration(2, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_2_3.migrate(db)
+                MIGRATION_3_4.migrate(db)
+            }
+        }
+
+        /**
+         * Migration from Version 4 to 5:
+         * - Provisions immutable cryptographic HACCP safety audit ledger table.
+         * - Extends sync_event_queue with CRDT Lamport timestamps and version vectors.
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS haccp_safety_ledger (
+                        blockHeight INTEGER PRIMARY KEY NOT NULL,
+                        timestamp INTEGER NOT NULL,
+                        stationId TEXT NOT NULL,
+                        incidentType TEXT NOT NULL,
+                        itemDescription TEXT NOT NULL,
+                        measuredValue TEXT NOT NULL,
+                        thresholdValue TEXT NOT NULL,
+                        actionTaken TEXT NOT NULL,
+                        previousHash TEXT NOT NULL,
+                        currentHash TEXT NOT NULL UNIQUE,
+                        signatureVerified INTEGER NOT NULL DEFAULT 1,
+                        inspectorSignedBy TEXT NOT NULL DEFAULT 'AUTOMATED_VISION_AUDIT'
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS idx_haccp_station_timestamp ON haccp_safety_ledger(stationId, timestamp)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS idx_haccp_incident_type ON haccp_safety_ledger(incidentType)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS idx_haccp_hash ON haccp_safety_ledger(currentHash)")
+
+                db.execSQL("ALTER TABLE sync_event_queue ADD COLUMN lamportTimestamp INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE sync_event_queue ADD COLUMN versionVectorJson TEXT NOT NULL DEFAULT '{}'")
+            }
+        }
+
         fun getInstance(context: Context): ChefAgentDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -226,7 +292,7 @@ abstract class ChefAgentDatabase : RoomDatabase() {
                     DATABASE_NAME
                 )
                     .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING) // Concurrency optimization
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_1_3) // Formal Room Migrations
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_1_3, MIGRATION_1_4, MIGRATION_2_4) // Formal Room Migrations
                     // .fallbackToDestructiveMigration() is strictly removed to prevent data loss!
                     .build()
                 INSTANCE = instance
@@ -235,3 +301,4 @@ abstract class ChefAgentDatabase : RoomDatabase() {
         }
     }
 }
+

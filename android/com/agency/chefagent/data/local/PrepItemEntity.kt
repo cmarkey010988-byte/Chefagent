@@ -38,7 +38,17 @@ data class PrepItemEntity(
     val banquetEventId: String? = null,
 
     // ========================================================================
+    // Edge-AI Vision Telemetry & Pan Fill Level Fields
+    // ========================================================================
+    val visionStationId: String? = null,
+    val detectedItemClass: String? = null,
+    val fillLevelPercentage: Double = 100.0, // 0.0 - 100.0%
+    val anomalyFlag: Boolean = false,
+    val lastVisualTimestamp: Long? = null,
+
+    // ========================================================================
     // Last-Writer-Wins (LWW) Conflict Resolution Timestamp
     // ========================================================================
     val last_modified_utc: Long = System.currentTimeMillis()
 )
+

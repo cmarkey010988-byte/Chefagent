@@ -95,4 +95,59 @@ interface PrepItemDao {
     suspend fun resetAndSeedPrep(items: List<PrepItemEntity>) {
         insertPrepItems(items)
     }
+
+    // ========================================================================
+    // Edge-AI Vision Telemetry & Pan Fill Level Queries (WAL Concurrency)
+    // ========================================================================
+
+    /**
+     * Observes station pans falling below critical par fill-level threshold (e.g. <= 25%).
+     */
+    @Query("""
+        SELECT * FROM prep_items 
+        WHERE fillLevelPercentage <= :thresholdPercent AND isCompleted = 0
+        ORDER BY fillLevelPercentage ASC, priorityLevel ASC
+    """)
+    fun observeLowInventoryPans(thresholdPercent: Double = 25.0): Flow<List<PrepItemEntity>>
+
+    /**
+     * Observes active visual anomalies (e.g. pan depleted without audio command, safety hazard).
+     */
+    @Query("""
+        SELECT * FROM prep_items 
+        WHERE anomalyFlag = 1 
+        ORDER BY lastVisualTimestamp DESC
+    """)
+    fun observeVisionAnomalies(): Flow<List<PrepItemEntity>>
+
+    /**
+     * Atomically updates pan fill-level telemetry with Last-Writer-Wins (LWW) timestamp check.
+     */
+    @Query("""
+        UPDATE prep_items 
+        SET fillLevelPercentage = :fillLevel, 
+            anomalyFlag = :anomalyFlag, 
+            lastVisualTimestamp = :timestamp, 
+            visionStationId = :stationId,
+            detectedItemClass = :detectedClass,
+            last_modified_utc = :timestamp 
+        WHERE id = :id AND last_modified_utc <= :timestamp
+    """)
+    suspend fun updateVisionTelemetryWithLww(
+        id: String,
+        fillLevel: Double,
+        anomalyFlag: Boolean,
+        stationId: String,
+        detectedClass: String,
+        timestamp: Long = System.currentTimeMillis()
+    ): Int
+
+    /**
+     * Batch updates vision telemetry frames inside a WAL transaction block.
+     */
+    @Transaction
+    suspend fun updateBatchVisionTelemetry(telemetryItems: List<PrepItemEntity>) {
+        insertPrepItems(telemetryItems)
+    }
 }
+

@@ -39,6 +39,12 @@ export interface ChronosTimelineItem {
   chronosStage: ChronosStage;
   targetPlatingTimestamp: number; // Hard event plating deadline
   banquetEventId?: string;
+  // Edge-AI Vision Telemetry Fields
+  visionStationId?: string;
+  detectedItemClass?: string;
+  fillLevelPercentage?: number; // 0 - 100%
+  anomalyFlag?: boolean;
+  lastVisualTimestamp?: number;
   // Computed runtime fields
   minutesToBurnLine: number;
   urgencyStatus: ChronosUrgencyStatus;
